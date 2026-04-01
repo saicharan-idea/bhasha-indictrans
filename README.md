@@ -117,6 +117,3 @@ A higher score means the output is closer in meaning to the reference translatio
 This measures generation speed. It is useful when the model is intended for production or real-time use.
 
 
-## Summary
-
-This project provides a practical pipeline to fine-tune IndicTrans2 on custom bilingual data with minimal compute cost and measurable evaluation output.
