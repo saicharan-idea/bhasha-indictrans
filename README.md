@@ -1,119 +1,43 @@
-# IndicTrans2 LoRA Fine-Tuning (150K Dataset)
+# Bhaasha - Legal Document Translation to Indic Languages
 
 ## Overview
+This repository contains a suite of notebooks and pipelines dedicated to benchmarking and fine-tuning state-of-the-art Neural Machine Translation (NMT) models for the complex task of translating English legal documents into Indic languages (with a prominent focus on Marathi).
 
-This project fine-tunes the IndicTrans2 translation model using LoRA (Low-Rank Adaptation) on a parallel dataset of approximately 150K examples.
+## Supported Architectures
+This repository contains complete pipelines for training, evaluating, and running inference on several architectures:
+*   **NLLB-200 (No Language Left Behind)**: Memory-optimized fine-tuning of the `facebook/nllb-200-distilled-600M` model.
+*   **IndicTrans2**: Inference and Zero-Shot baseline benchmarking using `ai4bharat/indictrans2-en-indic-1B`.
+*   **mBART**: Specialized training and evaluation paths for mBART large.
 
-## What This Project Does
+## Repository Structure
 
-When you run the notebook, it will:
+*   `nllb-finetunning.ipynb`
+    The core training loop for fine-tuning the 600M NLLB model entirely on consumer/free-tier GPUs (e.g., Kaggle T4, Google Colab 15GB). This notebook implements extreme memory optimizations (8-bit quantization, gradient checkpointing, mixed precision) to circumvent CUDA Out-Of-Memory errors while maintaining identical modeling accuracy.
+*   `mbart_finetune_training.ipynb`
+    Historical or specialized pipeline dedicated to the end-to-end fine-tuning and state management of mBART architectures.
+*   `benchmark_translation.ipynb`
+    Zero-shot and baseline generation scripts. Optimized for mass-translation generation combining dynamic VRAM caching fixes and tensor batching.
+*   `eval_mbart.ipynb` & `eval_bhaasha.ipynb`
+    Rigorous evaluation scripts computing `sacrebleu` metrics. Automatically compares Fine-Tuned BLEU scores against the Base Model BLEU scores, producing detailed visual predictions linking Source, Reference, and Predicted data.
 
-1. Load the pretrained IndicTrans2 model
-2. Apply LoRA adapters for parameter-efficient fine-tuning
-3. Load and clean the training dataset
-4. Train the model on the source-target pairs
-5. Evaluate the model using:
-   - BLEU score
-   - Semantic similarity
-   - Generation throughput
-6. Save the fine-tuned artifacts for later use
+## Key Technical Features
 
-## What You Need Before Running
+### Extreme Memory Optimizations
+Pipelines are hardcoded to utilize `bitsandbytes` 8-bit AdamW (`optim="adamw_8bit"`), combined with `gradient_checkpointing=True` and Mixed Precision FP16 (`fp16=True`). By coupling drastically reduced real batch sizes (e.g., `4`) with expanded gradient accumulation steps (e.g., `8`), the code simulates massive 32-batch training steps entirely under 15GB of VRAM limits.
 
-### Hardware
-- Minimum: 1 GPU
-- Recommended for this notebook: NVIDIA T4 or better
-- More GPU memory will reduce training time
+### Kaggle & Colab File Safety
+Kaggle and Colab filesystems frequently desync or wipe `/kaggle/working/` directories upon kernel restarts or GPU limits. The pipelines avoid this by natively implementing a `.zip` state-save mechanism via `shutil.make_archive` at the split-second training ends, ensuring checkpoints are permanently accessible.
 
-### Software
-- Python 3.10+
-- PyTorch
-- Transformers
-- Datasets
-- PEFT
-- SacreBLEU
-- SentenceTransformers
+### In-Memory Evaluation
+Evaluation pipelines are designed to load their models directly from PyTorch's `Seq2SeqTrainer` object memory reference (`ft_model = model`) rather than risking `HFValidationError` bugs during disk I/O reads.
 
-### Install Dependencies
+## Basic Setup
 
+### Core Dependencies
+Ensure the compute instance is instantiated with the following dependencies to avoid mathematical un-scaler bounds errors:
 ```bash
-pip install torch transformers datasets peft accelerate sacrebleu sentence-transformers
+pip install torch transformers datasets accelerate sacrebleu bitsandbytes
 ```
 
-## How to Run It
-
-### 1. Open the notebook
-Run the notebook in:
-- Google Colab, or
-- A local Jupyter environment with GPU support
-
-### 2. Configure the language and column settings
-Set the source language, target language, and the dataset column names.
-
-Example:
-
-```python
-SRC_LANG = "eng_Latn"
-TGT_LANG = "hin_Deva"
-
-SRC_COL = "english"
-TGT_COL = "hindi"
-
-MAX_LEN = 128
-```
-
-### 3. Run training
-Execute the notebook cells in order.
-
-The notebook will:
-- Load the base model
-- Add LoRA adapters
-- Train on the dataset
-- Save the trained adapter weights
-
-### 4. Run evaluation
-After training, the notebook evaluates the model on a held-out test set.
-
-It reports:
-- BLEU score
-- Semantic similarity
-- Words per minute (throughput)
-
-## What Happens During the Process
-
-### Training
-During training, only the LoRA layers are updated. This makes the process much cheaper and faster than full fine-tuning.
-
-### Evaluation
-The model is tested on unseen examples to measure:
-- How closely the translation matches the reference
-- Whether the meaning is preserved
-- How fast the model generates output
-
-### Output
-At the end, you should expect:
-- Fine-tuned LoRA adapter weights
-- Evaluation scores
-- Sample translations
-- A model ready for inference or merging
-
-## Expected Results
-
-### BLEU Score
-A higher BLEU score means better overlap with the reference translation.
-
-Typical interpretation:
-- 36+ = excellent
-- 32–36 = strong
-- 28–32 = acceptable
-- Below 28 = needs improvement
-
-### Semantic Similarity
-This measures meaning preservation rather than exact wording.
-
-A higher score means the output is closer in meaning to the reference translation.
-
-### Words Per Minute
-This measures generation speed. It is useful when the model is intended for production or real-time use.
-
-
+### Datasets
+Requires highly clean parallel translation data provided as CSVs (e.g., `legal_train.csv`, `legal_test.csv`, `legal_val.csv`) containing source and benchmark target columns. The ingestion pipeline natively uses `os.walk` path discovery for flexible directory mounts on Kaggle.
